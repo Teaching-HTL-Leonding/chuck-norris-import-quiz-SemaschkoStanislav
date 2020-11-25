@@ -20,31 +20,52 @@ HttpClient client = new();
 var factory = new CookbookContextFactory();
 using var dbContext = factory.CreateDbContext(args);
 
-Console.WriteLine("Enter a number of joke u want to generate: ");
-var userInput =  Convert.ToInt32(Console.ReadLine());
-
-var numOfJokes = userInput >= 1 && userInput <= 10 ? userInput : 5;
-
-for (int i = 0; i < numOfJokes; i++)
+if (args[0] == "clear")
 {
-    try
-    {
-        HttpResponseMessage response = await client.GetAsync("https://api.chucknorris.io/jokes/random");
-        response.EnsureSuccessStatusCode();
-        string jsonString = await response.Content.ReadAsStringAsync();
-
-        var jsonObject = JsonSerializer.Deserialize<JsonObject>(jsonString);
-
-        var newJoke = new ChuckNorisJoke {ChuckNorrisId = jsonObject.Id,Url = jsonObject.Url, Joke = jsonObject.Value };
-        dbContext.Jokes.Add(newJoke);
-        await dbContext.SaveChangesAsync();
-    }
-    catch (HttpRequestException e)
-    {
-        Console.WriteLine("\nException Caught!");
-        Console.WriteLine("Message :{0} ", e.Message);
-    }
+    Console.WriteLine("Start clearing...");
+    await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM Jokes");
+    Console.WriteLine("DB was cleared");
 }
+else
+{
+    var numOfJokes = Convert.ToInt32(args[0]) >= 1 && Convert.ToInt32(args[0]) <= 10 ? Convert.ToInt32(args[0]) : 5;
+
+    Console.WriteLine("Adding joeks to the DB ...");
+
+    for (int i = 0; i < numOfJokes; i++)
+    {
+        try
+        {
+            HttpResponseMessage response = await client.GetAsync("https://api.chucknorris.io/jokes/random");
+            response.EnsureSuccessStatusCode();
+            string jsonString = await response.Content.ReadAsStringAsync();
+
+            var jsonObject = JsonSerializer.Deserialize<JsonObject>(jsonString);
+
+            var newJoke = new ChuckNorisJoke { ChuckNorrisId = jsonObject.Id, Url = jsonObject.Url, Joke = jsonObject.Value };
+
+            using var transaction = await dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                dbContext.Jokes.Add(newJoke);
+                await dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (SqlException ex)
+            {
+                Console.Error.WriteLine($"Something bad happened: {ex.Message}");
+            }
+        }
+        catch (HttpRequestException e)
+        {
+            Console.WriteLine("\nException Caught!");
+            Console.WriteLine("Message :{0} ", e.Message);
+        }
+    }
+    Console.WriteLine($"Added {numOfJokes}/{numOfJokes} Jokes to the DB");
+
+}
+
 
 class JsonObject
 {
@@ -76,7 +97,7 @@ class ChuckNorisJoke
     public int Id { get; set; }
 
     [MaxLength(40)]
-    public string ChuckNorrisId { get; set; }
+    public string? ChuckNorrisId { get; set; }
 
     [MaxLength(1024)]
     public string Url { get; set; }
