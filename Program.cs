@@ -33,7 +33,11 @@ for (int i = 0; i < numOfJokes; i++)
         response.EnsureSuccessStatusCode();
         string jsonString = await response.Content.ReadAsStringAsync();
 
-        var joke = JsonSerializer.Deserialize<Joke>(jsonString);
+        var jsonObject = JsonSerializer.Deserialize<JsonObject>(jsonString);
+
+        var newJoke = new ChuckNorisJoke {ChuckNorrisId = jsonObject.Id,Url = jsonObject.Url, Joke = jsonObject.Value };
+        dbContext.Jokes.Add(newJoke);
+        await dbContext.SaveChangesAsync();
     }
     catch (HttpRequestException e)
     {
@@ -42,7 +46,7 @@ for (int i = 0; i < numOfJokes; i++)
     }
 }
 
-class Joke
+class JsonObject
 {
     [JsonPropertyName("categories")]
     public string[] Categories { get; set; }
